@@ -1,5 +1,6 @@
 #include "thresfilter.h"
-#define uint unsigned int 
+
+#define uint unsigned int
 
 void thresfilter(const int xsize, const int ysize, pixel* src)
 {

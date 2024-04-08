@@ -4,7 +4,9 @@
 #include <time.h>
 #include "ppmio.h"
 #include "blurfilter.h"
+#include "blurfilterpthreads.h"
 #include "gaussw.h"
+#include "pixel.h"
 
 #define MAX_RAD 1000
 
@@ -47,7 +49,8 @@ int main (int argc, char ** argv)
 	printf("Calling filter\n");
 	
 	clock_gettime(CLOCK_REALTIME, &stime);
-	blurfilter(xsize, ysize, src, radius, w);
+	// blurfilter(xsize, ysize, src, radius, w);
+	blurfilterPthreads(xsize, ysize, src, radius, w);
 	clock_gettime(CLOCK_REALTIME, &etime);
 	
 	printf("Filtering took: %g secs\n", (etime.tv_sec  - stime.tv_sec) +
