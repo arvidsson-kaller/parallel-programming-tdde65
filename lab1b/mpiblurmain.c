@@ -1,0 +1,296 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
+#include "ppmio.h"
+#include "blurfilter.h"
+#include "blurfiltermpi.h"
+#include "gaussw.h"
+#include "pixel.h"
+#include "mpi.h"
+#include <math.h>
+
+#define RADIUS 10
+#define PPM "im2.ppm"
+#define IN "./data/"
+#define OUT "./out/"
+
+#define TAG_SIZE_MPI 1
+#define TAG_DATA_MPI 2
+
+int is_power_of_two(unsigned int x)
+{
+	// A power of two has only one bit set. So, if x is a power of two,
+	// only one bit will be set, and x - 1 will have all the bits set
+	// to the right of the original set bit. For example:
+	// 8 (1000) -> 7 (0111)
+	// 16 (10000) -> 15 (01111)
+	// If x is 0, it will return false.
+	return (x && !(x & (x - 1)));
+}
+
+void calculate_dimensions(int p, unsigned *cols, unsigned *rows)
+{
+	if (is_power_of_two(p) && p != 1)
+	{
+		unsigned diff = -1;
+		for (size_t i = 1; i < p; i *= 2)
+		{
+			unsigned tmp = abs(i - p / i);
+			if (tmp < diff)
+			{
+				diff = tmp;
+				*cols = i;
+				*rows = p / i;
+			}
+		}
+	}
+	else
+	{
+		double root = sqrt(p);
+		unsigned flo = floor(root);
+		unsigned cei = ceil(root);
+		if (cei * flo <= p)
+		{
+			*cols = cei;
+			*rows = flo;
+		}
+		else
+		{
+			*cols = *rows = flo;
+		}
+	}
+	if (*rows > *cols)
+	{
+		unsigned tmp = *cols;
+		*cols = *rows;
+		*rows = tmp;
+	}
+}
+
+int divide_image(pixel *src, pixel *cells_source, unsigned xsize, unsigned ysize, unsigned cols, unsigned rows, unsigned max_cell_size, unsigned *cell_sizes)
+{
+	// divide image
+	unsigned xsize_cell = xsize / cols;
+	unsigned ysize_cell = ysize / rows;
+	// printf("Size malloc: %li\n", sizeof(pixel)* max_cell_size*cols*rows);
+	// pixel *cells_source = (pixel *)malloc(sizeof(pixel) * (max_cell_size)*cols * rows);
+	// printf("cells_source %p\n", cells_source);
+	for (size_t row = 0; row < rows; row++)
+	{
+		for (size_t col = 0; col < cols; col++)
+		{
+			unsigned rank = (col + row * cols);
+			// printf("!2 rank: %d\n", rank);
+			pixel *cell_src = cells_source + (max_cell_size)*rank;
+			// printf("!3 cell_src %p\n", cell_src);
+
+			// 3,1
+			int y_start = row * ysize_cell - RADIUS;
+			int y_end = (row + 1) * ysize_cell + RADIUS;
+			if (row == rows - 1)
+			{
+				// Handle extra pixels in the last col
+				y_end = ysize + RADIUS;
+			}
+			int x_start = col * xsize_cell - RADIUS;
+			int x_end = (col + 1) * xsize_cell + RADIUS;
+			if (col == cols - 1)
+			{
+				// Handle extra pixels in the last row
+				x_end = xsize + RADIUS;
+			}
+
+			for (int y = y_start; y < y_end; y++)
+			{
+
+				for (int x = x_start; x < x_end; x++)
+				{
+					pixel ptmp;
+					ptmp.r = ptmp.g = ptmp.b = 255;
+
+					if (x >= 0 && y >= 0 && x < xsize && y < ysize)
+					{
+						// printf("!4\n");
+						ptmp = src[x + y * xsize];
+					}
+
+					// printf("!5\n");
+					cell_src[(x - x_start) + (y - y_start) * (x_end - x_start)] = ptmp;
+					// printf("!6\n");
+				}
+			}
+			cell_sizes[rank * 2] = x_end - x_start;
+			cell_sizes[rank * 2 + 1] = y_end - y_start;
+		}
+	}
+}
+
+int main(int argc, char **argv)
+{
+	int xsize, ysize, colmax;
+
+	MPI_Init(&argc, &argv);
+	MPI_Datatype PIXEL_MPI;
+	{
+		pixel item;
+		MPI_Datatype block_types[] = {MPI_UNSIGNED_CHAR, MPI_UNSIGNED_CHAR, MPI_UNSIGNED_CHAR};
+		int block_lenghts[] = {1, 1, 1};
+		MPI_Aint start, displacement[3];
+
+		MPI_Get_address(&item, &start);
+		MPI_Get_address(&item.r, &displacement[0]);
+		displacement[0] -= start;
+		MPI_Get_address(&item.g, &displacement[1]);
+		displacement[1] -= start;
+		MPI_Get_address(&item.b, &displacement[2]);
+		displacement[2] -= start;
+
+		MPI_Type_create_struct(3, block_lenghts, displacement, block_types, &PIXEL_MPI);
+		MPI_Type_commit(&PIXEL_MPI);
+	}
+	int p;	// number of started MPI processes
+	int me; // my rank
+	MPI_Status status;
+	MPI_Comm_size(MPI_COMM_WORLD, &p);
+	MPI_Comm_rank(MPI_COMM_WORLD, &me);
+
+	double w[RADIUS];
+
+	unsigned cols = 0;
+	unsigned rows = 0;
+
+	calculate_dimensions(p, &cols, &rows);
+
+	printf("%dx%d\n", cols, rows);
+
+	unsigned me_col = me % cols;
+	unsigned me_row = me / cols;
+	char me_have_work = cols * rows > me;
+	if (me_have_work)
+	{
+		printf("I am %d and doing %d,%d\n", me, me_col, me_row);
+	}
+
+	unsigned max_cell_size = 0;
+	unsigned cell_sizes[cols * rows * 2];
+	char file[100];
+	struct timespec stime, etime;
+
+	pixel *cells_source;
+	if (me == 0)
+	{
+		pixel *src = (pixel *)malloc(sizeof(pixel) * MAX_PIXELS);
+		sprintf(file, "%s%s", IN, PPM);
+
+		/* Read file */
+		if (read_ppm(file, &xsize, &ysize, &colmax, (char *)src) != 0)
+			exit(1);
+		if (colmax > 255)
+		{
+			fprintf(stderr, "Too large maximum color-component value\n");
+			exit(1);
+		}
+		printf("Has read the image with size %dx%d\n", xsize, ysize);
+
+		max_cell_size = (xsize / cols + cols + RADIUS * 2) * (ysize / rows + rows + RADIUS * 2);
+		// printf("Size malloc: %li\n", sizeof(pixel)* max_cell_size*cols*rows);
+		cells_source = (pixel *)malloc(sizeof(pixel) * (max_cell_size)*cols * rows);
+
+		divide_image(src, cells_source, xsize, ysize, cols, rows, max_cell_size, cell_sizes);
+		// free(src);
+	}
+
+	unsigned cell_size[2];
+
+	if (me_have_work)
+	{
+		get_gauss_weights(RADIUS, w);
+
+		MPI_Bcast(&max_cell_size, 1, MPI_UNSIGNED, 0, MPI_COMM_WORLD);
+		printf("I am %d and I have %i\n", me, max_cell_size);
+		MPI_Scatter(cell_sizes, 2, MPI_UNSIGNED, &cell_size, 2, MPI_UNSIGNED, 0, MPI_COMM_WORLD);
+		pixel *src = (pixel *)malloc(sizeof(pixel) * max_cell_size);
+
+		MPI_Scatter(cells_source, max_cell_size, PIXEL_MPI, src, max_cell_size, PIXEL_MPI, 0, MPI_COMM_WORLD);
+		if (me == 0)
+		{
+			// pixel pix = src[10];
+			// printf("(%d, %d, %d)", pix.r, pix.g, pix.b);
+			// free(cells_source);
+		}
+
+		unsigned xsize_cell = cell_size[0];
+		unsigned ysize_cell = cell_size[1];
+		sprintf(file, "%s%d-before-before-%s", OUT, me, PPM);
+		printf("si senor %s?\n", file);
+		if (write_ppm(file, xsize_cell, ysize_cell, (char *)src) != 0)
+			exit(1);
+		blurfilterMPI(xsize_cell, ysize_cell, src, RADIUS, w);
+		sprintf(file, "%s%d-before-%s", OUT, me, PPM);
+		printf("si senor %s?\n", file);
+		if (write_ppm(file, xsize_cell, ysize_cell, (char *)src) != 0)
+			exit(1);
+
+		pixel *dst = (pixel *)malloc(sizeof(pixel) * (xsize_cell - RADIUS * 2) * (ysize_cell - RADIUS * 2));
+		unsigned dst_i = 0;
+		printf("src: \n");
+		for (int y = RADIUS; y < ysize_cell - RADIUS; y++)
+		{
+			for (int x = RADIUS; x < xsize_cell - RADIUS; x++)
+			{
+				unsigned i = x + y * xsize_cell;
+				// printf("%d, ", src[i].r);
+				// printf("%d of %d, %d of %d?\n", i, max_cell_size, dst_i + 1, (xsize_cell - RADIUS * 0) * (ysize_cell - RADIUS * 0));
+				dst[dst_i++] = src[i];
+			}
+		}
+
+		sprintf(file, "%s%d-%s", OUT, me, PPM);
+		printf("si senor %s?\n", file);
+		if (write_ppm(file, (xsize_cell - RADIUS * 2), (ysize_cell - RADIUS * 2), (char *)dst) != 0)
+			exit(1);
+	}
+
+	// if (me == 0)
+	// {
+	// 	// MPI_Send(sizes, 2, MPI_UNSIGNED, rank, TAG_SIZE_MPI, MPI_COMM_WORLD);
+	// 	// MPI_Scatter(cells_source,  max_cell_size, PIXEL_MPI, );
+
+	// 	/* filter */
+
+	// 	printf("Calling filter\n");
+
+	// 	clock_gettime(CLOCK_REALTIME, &stime);
+
+	// 	// skicka data?
+
+	// 	// blurfilterMPI(PIXEL_MPI, p, me, xsize, ysize, src, RADIUS, w);
+	// 	clock_gettime(CLOCK_REALTIME, &etime);
+
+	// 	printf("Filtering took: %g secs\n", (etime.tv_sec - stime.tv_sec) +
+	// 											1e-9 * (etime.tv_nsec - stime.tv_nsec));
+
+	// 	/* Write result */
+	// 	printf("Writing output file\n");
+
+	// 	sprintf(file, "%s%ld-%s", OUT, (etime.tv_sec), PPM);
+	// 	// if (write_ppm(file, xsize, ysize, (char *)cells_source) != 0)
+	// 	// 	exit(1);
+	// 	// if (write_ppm(file, xsize, ysize, (char *)src) != 0)
+	// 	// 	exit(1);
+	// }
+	// else if (me_have_work)
+	// {
+	// 	pixel *src = (pixel *)malloc(sizeof(pixel) * MAX_PIXELS);
+	// 	unsigned max_cell_size;
+	// 	// blurfilterMPI(PIXEL_MPI, p, me, xsize, ysize, src, RADIUS, w);
+	// }
+	// else
+	// {
+	// 	printf("No work for me (%d) :(\n", me);
+	// }
+
+	MPI_Finalize();
+	return 0;
+}
