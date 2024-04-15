@@ -47,9 +47,9 @@ void blurfilterMPI(const int xsize, const int ysize, pixel *src, const int radiu
 	}
 
 	// Horizontal
-	for (int y = radius; y < ysize - radius; y++)
+	for (int y = radius; y <= ysize - radius; y++)
 	{
-		for (int x = radius; x < xsize - radius; x++)
+		for (int x = radius; x <= xsize - radius; x++)
 		{
 			int i = x + y * xsize;
 			gather(i, src, dst, radius, w, 1);
@@ -57,9 +57,9 @@ void blurfilterMPI(const int xsize, const int ysize, pixel *src, const int radiu
 	}
 
 	// Vertical
-	for (int y = radius; y < ysize - radius; y++)
+	for (int y = radius; y <= ysize - radius; y++)
 	{
-		for (int x = radius; x < xsize - radius; x++)
+		for (int x = radius; x <= xsize - radius; x++)
 		{
 			int i = x + y * xsize;
 			gather(i, dst, src, radius, w, xsize);

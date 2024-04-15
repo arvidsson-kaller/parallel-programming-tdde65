@@ -5,7 +5,7 @@ LFLAGS = -lpthread -lrt -lm -g
 all: blurc thresc
 
 clean:
-	-$(RM) *.o blurc thresc
+	-$(RM) *.o blurc thresc ./out/*
 
 blurc: ppmio.o gaussw.o blurfilter.o blurfiltermpi.o mpiblurmain.o
 	$(CC) -o $@ ppmio.o gaussw.o blurfilter.o blurfiltermpi.o mpiblurmain.o $(LFLAGS)
