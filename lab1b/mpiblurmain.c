@@ -3,7 +3,6 @@
 #include <string.h>
 #include <time.h>
 #include "ppmio.h"
-#include "blurfilter.h"
 #include "blurfiltermpi.h"
 #include "gaussw.h"
 #include "pixel.h"
@@ -14,9 +13,6 @@
 #define PPM "im1.ppm"
 #define IN "./data/"
 #define OUT "./out/"
-
-#define TAG_SIZE_MPI 1
-#define TAG_DATA_MPI 2
 
 int is_power_of_two(unsigned int x)
 {
@@ -153,8 +149,6 @@ int main(int argc, char **argv)
 
 	calculate_dimensions(p, &cols, &rows);
 
-	char me_have_work = cols * rows > me;
-
 	unsigned max_cell_size = 0;
 	unsigned cell_sizes[cols * rows * 2];
 	char file[100];
@@ -187,79 +181,77 @@ int main(int argc, char **argv)
 
 	unsigned cell_size[2];
 
-	if (me_have_work)
+
+	get_gauss_weights(RADIUS, w);
+
+	clock_gettime(CLOCK_REALTIME, &stime);
+	MPI_Bcast(&max_cell_size, 1, MPI_UNSIGNED, 0, MPI_COMM_WORLD);
+	MPI_Scatter(cell_sizes, 2, MPI_UNSIGNED, &cell_size, 2, MPI_UNSIGNED, 0, MPI_COMM_WORLD);
+	pixel *src = (pixel *)malloc(sizeof(pixel) * max_cell_size);
+
+	MPI_Scatter(cells_source, max_cell_size, PIXEL_MPI, src, max_cell_size, PIXEL_MPI, 0, MPI_COMM_WORLD);
+	if (me == 0)
 	{
-		get_gauss_weights(RADIUS, w);
+		free(cells_source);
+	}
 
-		clock_gettime(CLOCK_REALTIME, &stime);
-		MPI_Bcast(&max_cell_size, 1, MPI_UNSIGNED, 0, MPI_COMM_WORLD);
-		MPI_Scatter(cell_sizes, 2, MPI_UNSIGNED, &cell_size, 2, MPI_UNSIGNED, 0, MPI_COMM_WORLD);
-		pixel *src = (pixel *)malloc(sizeof(pixel) * max_cell_size);
+	unsigned xsize_cell = cell_size[0];
+	unsigned ysize_cell = cell_size[1];
 
-		MPI_Scatter(cells_source, max_cell_size, PIXEL_MPI, src, max_cell_size, PIXEL_MPI, 0, MPI_COMM_WORLD);
-		if (me == 0)
+	blurfilterMPI(xsize_cell, ysize_cell, src, RADIUS, w);
+	
+	pixel *dst = (pixel *)malloc(sizeof(pixel) * max_cell_size);
+	unsigned dst_i = 0;
+	for (int y = RADIUS; y < ysize_cell - RADIUS; y++)
+	{
+		for (int x = RADIUS; x < xsize_cell - RADIUS; x++)
 		{
-			free(cells_source);
+			unsigned i = x + y * xsize_cell;
+			dst[dst_i++] = src[i];
 		}
+	}
+	free(src);
 
-		unsigned xsize_cell = cell_size[0];
-		unsigned ysize_cell = cell_size[1];
 
-		blurfilterMPI(xsize_cell, ysize_cell, src, RADIUS, w);
-		
-		pixel *dst = (pixel *)malloc(sizeof(pixel) * max_cell_size);
-		unsigned dst_i = 0;
-		for (int y = RADIUS; y < ysize_cell - RADIUS; y++)
+	if (me == 0)
+	{
+		src = (pixel *)malloc(sizeof(pixel) * max_cell_size * cols * rows);
+	}
+	MPI_Gather(dst, max_cell_size, PIXEL_MPI, src, max_cell_size, PIXEL_MPI, 0, MPI_COMM_WORLD);
+	free(dst);
+
+	if (me == 0)
+	{
+		dst = (pixel *)malloc(sizeof(pixel) * xsize * ysize);
+		for (size_t rank = 0; rank < cols * rows; rank++)
 		{
-			for (int x = RADIUS; x < xsize_cell - RADIUS; x++)
+			pixel *rank_src = src + max_cell_size * rank;
+			unsigned xsize_cell = cell_sizes[rank * 2] - RADIUS * 2;
+			unsigned ysize_cell = cell_sizes[rank * 2 + 1] - RADIUS * 2;
+
+			unsigned rank_col = rank % cols;
+			unsigned rank_row = rank / cols;
+
+			for (size_t cell_y = 0; cell_y < ysize_cell; cell_y++)
 			{
-				unsigned i = x + y * xsize_cell;
-				dst[dst_i++] = src[i];
-			}
-		}
-		free(src);
-
-
-		if (me == 0)
-		{
-			src = (pixel *)malloc(sizeof(pixel) * max_cell_size * cols * rows);
-		}
-		MPI_Gather(dst, max_cell_size, PIXEL_MPI, src, max_cell_size, PIXEL_MPI, 0, MPI_COMM_WORLD);
-		free(dst);
-
-		if (me == 0)
-		{
-			dst = (pixel *)malloc(sizeof(pixel) * xsize * ysize);
-			for (size_t rank = 0; rank < cols * rows; rank++)
-			{
-				pixel *rank_src = src + max_cell_size * rank;
-				unsigned xsize_cell = cell_sizes[rank * 2] - RADIUS * 2;
-				unsigned ysize_cell = cell_sizes[rank * 2 + 1] - RADIUS * 2;
-
-				unsigned rank_col = rank % cols;
-				unsigned rank_row = rank / cols;
-
-				for (size_t cell_y = 0; cell_y < ysize_cell; cell_y++)
+				for (size_t cell_x = 0; cell_x < xsize_cell; cell_x++)
 				{
-					for (size_t cell_x = 0; cell_x < xsize_cell; cell_x++)
-					{
-						unsigned x = (xsize / cols) * rank_col + cell_x;
-						unsigned y = (ysize / rows) * rank_row + cell_y;
-						// Transfer into global from rank
-						dst[x + y * xsize] = rank_src[cell_x + cell_y * xsize_cell];
-					}
+					unsigned x = (xsize / cols) * rank_col + cell_x;
+					unsigned y = (ysize / rows) * rank_row + cell_y;
+					// Transfer into global from rank
+					dst[x + y * xsize] = rank_src[cell_x + cell_y * xsize_cell];
 				}
 			}
-
-			clock_gettime(CLOCK_REALTIME, &etime);
-			printf("Filtering took: %g secs\n", (etime.tv_sec - stime.tv_sec) +
-													1e-9 * (etime.tv_nsec - stime.tv_nsec));
-
-			sprintf(file, "%s%d-final-%s", OUT, me, PPM);
-			if (write_ppm(file, xsize, ysize, (char *)dst) != 0)
-				exit(1);
-			free(dst);
 		}
+
+		clock_gettime(CLOCK_REALTIME, &etime);
+		printf("Filtering took: %g secs\n", (etime.tv_sec - stime.tv_sec) +
+												1e-9 * (etime.tv_nsec - stime.tv_nsec));
+
+		sprintf(file, "%s%d-final-%s", OUT, me, PPM);
+		if (write_ppm(file, xsize, ysize, (char *)dst) != 0)
+			exit(1);
+		free(dst);
 	}
 
 	MPI_Finalize();
