@@ -10,8 +10,8 @@
 #include "mpi.h"
 #include <math.h>
 
-#define RADIUS 10
-#define PPM "im4.ppm"
+#define RADIUS 100
+#define PPM "im1.ppm"
 #define IN "./data/"
 #define OUT "./out/"
 
@@ -146,7 +146,7 @@ int main(int argc, char **argv)
 	MPI_Comm_size(MPI_COMM_WORLD, &p);
 	MPI_Comm_rank(MPI_COMM_WORLD, &me);
 
-	double w[RADIUS];
+	double w[RADIUS+1];
 
 	unsigned cols = 0;
 	unsigned rows = 0;
@@ -206,7 +206,7 @@ int main(int argc, char **argv)
 		unsigned ysize_cell = cell_size[1];
 
 		blurfilterMPI(xsize_cell, ysize_cell, src, RADIUS, w);
-
+		
 		pixel *dst = (pixel *)malloc(sizeof(pixel) * max_cell_size);
 		unsigned dst_i = 0;
 		for (int y = RADIUS; y < ysize_cell - RADIUS; y++)
@@ -219,9 +219,6 @@ int main(int argc, char **argv)
 		}
 		free(src);
 
-		sprintf(file, "%s%d-%s", OUT, me, PPM);
-		if (write_ppm(file, (xsize_cell - RADIUS * 2), (ysize_cell - RADIUS * 2), (char *)dst) != 0)
-			exit(1);
 
 		if (me == 0)
 		{

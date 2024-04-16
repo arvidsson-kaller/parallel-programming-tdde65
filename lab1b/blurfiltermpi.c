@@ -47,7 +47,7 @@ void blurfilterMPI(const int xsize, const int ysize, pixel *src, const int radiu
 	}
 
 	// Horizontal
-	for (int y = radius; y <= ysize - radius; y++)
+	for (int y = 0; y < ysize; y++) // we need to blur the borders for separable filter
 	{
 		for (int x = radius; x <= xsize - radius; x++)
 		{
