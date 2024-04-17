@@ -152,7 +152,7 @@ int main(int argc, char **argv)
 	unsigned max_cell_size = 0;
 	unsigned cell_sizes[cols * rows * 2];
 	char file[100];
-	struct timespec stime, etime;
+	double stime, etime;
 
 	pixel *cells_source;
 	if (me == 0)
@@ -175,7 +175,7 @@ int main(int argc, char **argv)
 		max_cell_size = (xsize / cols + cols + RADIUS * 2) * (ysize / rows + rows + RADIUS * 2);
 		cells_source = (pixel *)malloc(sizeof(pixel) * (max_cell_size)*cols * rows);
 
-		clock_gettime(CLOCK_REALTIME, &stime);
+		stime = MPI_Wtime();
 		divide_image(src, cells_source, xsize, ysize, cols, rows, max_cell_size, cell_sizes);
 		free(src);
 	}
@@ -244,9 +244,8 @@ int main(int argc, char **argv)
 			}
 		}
 
-		clock_gettime(CLOCK_REALTIME, &etime);
-		printf("Filtering took: %g secs\n", (etime.tv_sec - stime.tv_sec) +
-												1e-9 * (etime.tv_nsec - stime.tv_nsec));
+		etime = MPI_Wtime();
+		printf("Filtering took: %g secs\n", (etime - stime));
 
 		sprintf(file, "%s%d-final-%s", OUT, me, PPM);
 		if (write_ppm(file, xsize, ysize, (char *)dst) != 0)

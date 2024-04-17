@@ -44,7 +44,7 @@ int main(int argc, char **argv)
 	int xsize, ysize, colmax;
 	unsigned size;
 	pixel *src;
-	struct timespec stime, etime;
+	double stime, etime;
 	char file[100];
 
 	if (me == 0)
@@ -64,7 +64,7 @@ int main(int argc, char **argv)
 		}
 		printf("Has read the image with size %dx%d\n", xsize, ysize);
 		size = xsize * ysize;
-		clock_gettime(CLOCK_REALTIME, &stime);
+		stime = MPI_Wtime();
 	}
 
 	MPI_Bcast(&size, 1, MPI_UNSIGNED, 0, MPI_COMM_WORLD);
@@ -111,9 +111,8 @@ int main(int argc, char **argv)
 
 	if (me == 0)
 	{
-		clock_gettime(CLOCK_REALTIME, &etime);
-
-		printf("Filtering took: %g secs\n", (etime.tv_sec - stime.tv_sec) + 1e-9 * (etime.tv_nsec - stime.tv_nsec));
+		etime = MPI_Wtime();
+		printf("Filtering took: %g secs\n", (etime - stime));
 
 		/* Write result */
 		printf("Writing output file\n");
