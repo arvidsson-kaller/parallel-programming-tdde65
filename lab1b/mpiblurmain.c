@@ -175,6 +175,7 @@ int main(int argc, char **argv)
 		max_cell_size = (xsize / cols + cols + RADIUS * 2) * (ysize / rows + rows + RADIUS * 2);
 		cells_source = (pixel *)malloc(sizeof(pixel) * (max_cell_size)*cols * rows);
 
+		clock_gettime(CLOCK_REALTIME, &stime);
 		divide_image(src, cells_source, xsize, ysize, cols, rows, max_cell_size, cell_sizes);
 		free(src);
 	}
@@ -184,7 +185,6 @@ int main(int argc, char **argv)
 
 	get_gauss_weights(RADIUS, w);
 
-	clock_gettime(CLOCK_REALTIME, &stime);
 	MPI_Bcast(&max_cell_size, 1, MPI_UNSIGNED, 0, MPI_COMM_WORLD);
 	MPI_Scatter(cell_sizes, 2, MPI_UNSIGNED, &cell_size, 2, MPI_UNSIGNED, 0, MPI_COMM_WORLD);
 	pixel *src = (pixel *)malloc(sizeof(pixel) * max_cell_size);
