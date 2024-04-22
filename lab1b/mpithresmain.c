@@ -81,24 +81,12 @@ int main(int argc, char **argv)
 	// chunks are oversized, make sure to not go out of bounds
 	unsigned chunk_size = MIN(max_chunk_size * (me + 1), size) - max_chunk_size * me;
 
-	unsigned chunk_average = averageMPI(chunk_size, src_chunk);
-	unsigned *chunk_averages;
-	if (me == 0)
-	{
-		chunk_averages = malloc(sizeof(unsigned) * p);
-	}
-	MPI_Gather(&chunk_average, 1, MPI_UNSIGNED, chunk_averages, 1, MPI_UNSIGNED, 0, MPI_COMM_WORLD);
+	unsigned chunk_sum = sumMPI(chunk_size, src_chunk);
+	unsigned sum = 0;
+	MPI_Allreduce(&chunk_sum, &sum, 1, MPI_UNSIGNED, MPI_SUM, MPI_COMM_WORLD);
 
-	unsigned average;
-	if (me == 0)
-	{
-		for (size_t i = 0; i < p; i++)
-		{
-			average += chunk_averages[i];
-		}
-		average /= p;
-	}
-	MPI_Bcast(&average, 1, MPI_UNSIGNED, 0, MPI_COMM_WORLD);
+	unsigned average = sum / size;
+	
 	thresfilterMPI(chunk_size, average, src_chunk);
 
 	pixel *dst;

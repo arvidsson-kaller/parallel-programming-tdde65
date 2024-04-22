@@ -7,7 +7,7 @@
 #define _THRESFILTERMPI_H_
 
 #include "pixel.h"
-unsigned averageMPI(const unsigned size, pixel *src);
+unsigned sumMPI(const unsigned size, pixel *src);
 
 void thresfilterMPI(const unsigned size, const unsigned average, pixel *src);
 

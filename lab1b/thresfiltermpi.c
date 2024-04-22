@@ -5,7 +5,7 @@
 
 #define uint unsigned int
 
-uint averageMPI(const unsigned size, pixel *src)
+uint sumMPI(const unsigned size, pixel *src)
 {
 	unsigned sum = 0;
 	for (unsigned i = 0; i < size; i++)
@@ -14,7 +14,7 @@ uint averageMPI(const unsigned size, pixel *src)
 		sum += (uint)px->r + (uint)px->g + (uint)px->b;
 		// printf("Sum at iteration %i is %i\n", i, sum);
 	}
-	return sum / size;
+	return sum;
 }
 
 void thresfilterMPI(const unsigned size, const unsigned average, pixel *src)
