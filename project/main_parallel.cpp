@@ -10,7 +10,7 @@
 #include "physics.h"
 #include "mpi.h"
 #include "divide.h"
-#include <forward_list>
+#include <vector>
 
 // Define a macro for enabling/disabling debug prints
 class DebugStream
@@ -58,7 +58,7 @@ float rand1()
 	return (float)(rand() / (float)RAND_MAX);
 }
 
-void wait_and_push(int rank, MPI_Request &req, pcord_t *recv_buf, std::forward_list<particle_info> &particles)
+void wait_and_push(int rank, MPI_Request &req, pcord_t *recv_buf, std::vector<particle_info> &particles)
 {
 	if (rank != -1)
 	{
@@ -68,7 +68,7 @@ void wait_and_push(int rank, MPI_Request &req, pcord_t *recv_buf, std::forward_l
 		MPI_Get_count(&status, PCORD_MPI, &count);
 		for (size_t i = 0; i < count; i++)
 		{
-			particles.push_front({recv_buf[i], false});
+			particles.push_back({recv_buf[i], false});
 		}
 	}
 }
@@ -146,7 +146,7 @@ int main(int argc, char **argv)
 
 	// 2. allocate particle buffer and initialize the particles
 
-	std::forward_list<particle_info> particles{};
+	std::vector<particle_info> particles{};
 
 	srand(time(NULL) + 1234);
 
@@ -172,7 +172,7 @@ int main(int argc, char **argv)
 		a = rand1() * 2 * PI;
 		particle.vx = r * cos(a);
 		particle.vy = r * sin(a);
-		particles.push_front({particle, false});
+		particles.push_back({particle, false});
 	}
 
 	pcord_t *particles_send_left = (pcord_t *)malloc(INIT_NO_PARTICLES * sizeof(pcord_t));
@@ -239,32 +239,31 @@ int main(int argc, char **argv)
 		unsigned send_up_size = 0, send_left_size = 0, send_right_size = 0, send_down_size = 0;
 		MPI_Request req_up, req_left, req_right, req_down;
 		MPI_Request req_recv_up, req_recv_left, req_recv_right, req_recv_down;
-		for (auto prev = particles.before_begin(), p = particles.begin(); p != particles.end();)
+		for (auto p = particles.begin(); p != particles.end();)
 		{
 			if (p->coords.x < box_border.x0)
 			{
 				particles_send_left[send_left_size++] = p->coords;
-				p = particles.erase_after(prev);
+				p = particles.erase(p);
 			}
 			else if (p->coords.x > box_border.x1)
 			{
 				particles_send_right[send_right_size++] = p->coords;
-				p = particles.erase_after(prev);
+				p = particles.erase(p);
 			}
 			else if (p->coords.y < box_border.y0)
 			{
 				particles_send_down[send_down_size++] = p->coords;
-				p = particles.erase_after(prev);
+				p = particles.erase(p);
 			}
 			else if (p->coords.y > box_border.y1)
 			{
 				particles_send_up[send_up_size++] = p->coords;
-				p = particles.erase_after(prev);
+				p = particles.erase(p);
 			}
 			else
 			{
 				++p;
-				++prev;
 			}
 		}
 		sent_over_stat += send_up_size + send_down_size + send_left_size + send_right_size;
