@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <stdbool.h>
+#include <iostream>
 
 #include "coordinate.h"
 #include "definitions.h"
@@ -94,7 +95,6 @@ int main(int argc, char **argv)
 					break; // only check collision of two particles
 				}
 			}
-			
 		}
 
 		// move particles that has not collided with another
