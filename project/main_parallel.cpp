@@ -3,6 +3,7 @@
 #include <stdio.h>
 // #include <math.h>
 #include <stdbool.h>
+#include <iostream>
 
 #include "coordinate.h"
 #include "definitions.h"
@@ -101,7 +102,7 @@ int main(int argc, char **argv)
 
 	calculate_dimensions(nproc, &dims[0], &dims[1]);
 	MPI_Dims_create(nproc, 2, dims);
-	cout0 << "dimensions: " << dims[0] << "x" << dims[1] << "\n";
+	cout0 << "dimensions: " << dims[0] << "x" << dims[1] << " with " << INIT_NO_PARTICLES << " particles\n";
 
 	int periods[2];
 	periods[0] = 0;
@@ -294,21 +295,23 @@ int main(int argc, char **argv)
 		wait_and_push(left_rank, req_recv_left, particles_recv_left, particles);
 		wait_and_push(right_rank, req_recv_right, particles_recv_right, particles);
 
+		MPI_Status tmp_status;
+
 		if (up_rank != -1)
 		{
-			MPI_Wait(&req_up, NULL);
+			MPI_Wait(&req_up, &tmp_status);
 		}
 		if (down_rank != -1)
 		{
-			MPI_Wait(&req_down, NULL);
+			MPI_Wait(&req_down, &tmp_status);
 		}
 		if (left_rank != -1)
 		{
-			MPI_Wait(&req_left, NULL);
+			MPI_Wait(&req_left, &tmp_status);
 		}
 		if (right_rank != -1)
 		{
-			MPI_Wait(&req_right, NULL);
+			MPI_Wait(&req_right, &tmp_status);
 		}
 	}
 
