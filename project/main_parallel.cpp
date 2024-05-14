@@ -241,22 +241,22 @@ int main(int argc, char **argv)
 		MPI_Request req_recv_up, req_recv_left, req_recv_right, req_recv_down;
 		for (auto p = particles.begin(); p != particles.end();)
 		{
-			if (p->coords.x < box_border.x0)
+			if (p->coords.x < box_border.x0 && left_rank != -1)
 			{
 				particles_send_left[send_left_size++] = p->coords;
 				p = particles.erase(p);
 			}
-			else if (p->coords.x > box_border.x1)
+			else if (p->coords.x > box_border.x1 && right_rank != -1)
 			{
 				particles_send_right[send_right_size++] = p->coords;
 				p = particles.erase(p);
 			}
-			else if (p->coords.y < box_border.y0)
+			else if (p->coords.y < box_border.y0 && down_rank != -1)
 			{
 				particles_send_down[send_down_size++] = p->coords;
 				p = particles.erase(p);
 			}
-			else if (p->coords.y > box_border.y1)
+			else if (p->coords.y > box_border.y1 && up_rank != -1)
 			{
 				particles_send_up[send_up_size++] = p->coords;
 				p = particles.erase(p);
@@ -327,7 +327,7 @@ int main(int argc, char **argv)
 		printf("Average pressure = %f\n", global_pressure / (WALL_LENGTH * time_max));
 	}
 
-	std::cout << my_rank << ", sent average: " << sent_over_stat * 1.0f / time_max << "\n";
+	// std::cout << my_rank << ", sent average: " << sent_over_stat * 1.0f / time_max << "\n";
 
 	MPI_Finalize();
 	return 0;
