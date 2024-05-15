@@ -183,11 +183,28 @@ Table 2: Comparison of performance of std::forward_list and std::vector, with 32
 | Time (s) std::forward_list  | 47.7115 | 12.7871 | 3.8445 | 0.998647 |
 | Time (s) std::vector | 28.0934 | 8.29144 | 2.23403 | 0.595723 |
 </div>
+</div>
 <br>
 
+#### 5.4 Grid vs rows
+We measured how many particles are sent depending on if the layout is row or grid.
+<div id="table3" style="display: flex; justify-content: center; align-items:center; flex-direction: column;">
+Table 3: Comparison of particles sent each timestep for different layouts.
 
+<div>
+
+| Particles | Particles | Average sent particles |
+|-----------|--------|--------|
+| 1x64  | 100000 | 9782 | 
+| 8x8 | 100000 | 2190 |
+| 1x64  | 50000 | 5155 | 
+| 8x8 | 50000 | 1083 |
 
 </div>
+</div>
+<br>
+Table 3 confirms that choosing a grid over rows results in less communication.
+
 
 ## 6&emsp;Discussion
 Ideal gas law, superlinear speedup and memory layout will be discussed.
