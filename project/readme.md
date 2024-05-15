@@ -186,7 +186,7 @@ Table 2: Comparison of performance of std::forward_list and std::vector, with 32
 </div>
 <br>
 
-#### 5.4 Grid vs rows
+#### 5.4&emsp;Grid vs rows
 We measured how many particles are sent depending on if the layout is row or grid.
 <div id="table3" style="display: flex; justify-content: center; align-items:center; flex-direction: column;">
 Table 3: Comparison of particles sent each timestep for different layouts.
@@ -229,6 +229,10 @@ This matches what we see in <a style="color:inherit;" href="#table1">table 1</a>
 We initially thought the linked list would have better performance, considering its cheaper insertion and deletion, which each simulation timestep has a lot of. Although the more expensive operations of vector seemed to be negligible due to the major performance increase that was gained from its cache locality. 
 
 While analyzing the performance with ITAC, the linked list had more consistent computation time between communication steps across processes, since all operations are similarly expensive O(1), while on a vector, the operations vary from O(1) to O(n).
+
+#### 6.4&emsp;Grid vs rows
+
+Grid sends less particles per timestep due to its higher ratio between area and circumference. However rows communicates with fewer neighbors. This means that if the communication overhead is relatively expensive, rows can be better, while grid performs better with more expensive communication. 
 
 ## 7&emsp;Conclusion
 
