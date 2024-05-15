@@ -10,18 +10,13 @@ Figure 1: Particle simulation.
 
 ## 1&emsp;Introduction
 
-We made a particule simulator with MPI (Message Passing Interface) <a style="color:inherit;" href="#reference1">[1]</a>, to verify the gas law $pV = nRT$. All particles had a radius of 1 and all collisions were perfectly elastic. No friction or other physical forces acted upon the particles. The particles moved around inside a rectangular space for simpler calcualtions, see <a style="color:inherit;" href="#figure1">figure 1</a>. MPI was used to speed up the calculations via parallelization. 
-
-#### 1.1&emsp;Limitations
-- A particle can only collide with exactly one other particle.
-- A particle can not both collide and bounce on the wall
-    - Can causes a particle to be outside of box wall for one timestamp
+We made a particle simulator with MPI (Message Passing Interface) <a style="color:inherit;" href="#reference1">[1]</a>, to verify the gas law $pV = nRT$. All particles had a radius of 1 and all collisions were perfectly elastic. No friction or other physical forces acted upon the particles. The particles moved around inside a rectangular space for simpler calculations, see <a style="color:inherit;" href="#figure1">figure 1</a>. MPI was used to speed up the calculations via parallelization. 
 
 ## 2&emsp;Method
 We divided the box into a grid, where each process gets one cell. We use a 2 dimensional MPI layout for assigning the cell.
 <div style="display: flex; justify-content: center; align-items:center; flex-direction: column;">
 <img id="figure2" src="./mpi.png"></img>
-Figure 2: MPI processes in a 2D grid, with particles in each process cell. Communications of particles leaving cell visualised.
+Figure 2: MPI processes in a 2D grid, with particles in each process cell. Communications of particles leaving cell visualized.
 </div>
 <br>
 
@@ -35,7 +30,7 @@ MPI_Cart_get(GRID_COMM_MPI, 2, dims, periods, my_coords);
 MPI_Comm_rank(GRID_COMM_MPI, &my_rank);
 ```
 Each process generates `TOTAL_PARTICLES/processes` amount of random particles. Particles are stored in `std::vector` (faster than `std::forward_list`, see discussion).
-At the end of one timestamp iteration, we check which particles are outside of the process' cell. If it has a neighbor who could recive them, we remove the particles from our particle list and send them to our neighbour.
+At the end of one timestamp iteration, we check which particles are outside of the process' cell. If it has a neighbor who could receive them, we remove the particles from our particle list and send them to our neighbor.
 ```cpp
 unsigned send_up_size = 0, send_left_size = 0, send_right_size = 0, send_down_size = 0;
 
@@ -68,7 +63,7 @@ All communications are done asynchronously in MPI with `MPI_Isend` and `MPI_Irec
 ```cpp
 if (up_rank != -1)
 {
-    // begin send and recive
+    // begin send and receive
     MPI_Isend(particles_send_up, send_up_size, PCORD_MPI, up_rank, 0, GRID_COMM_MPI, &req_up);
     MPI_Irecv(particles_recv_up, INIT_NO_PARTICLES, PCORD_MPI, up_rank, 0, GRID_COMM_MPI, &req_recv_up);
 }
@@ -98,6 +93,13 @@ if (up_rank != -1)
 
 ```
 
+#### 2.1&emsp;Limitations
+- A particle can only collide with exactly one other particle.
+- A particle can not both collide and bounce on the wall
+    - Can causes a particle to be outside of box wall for one timestamp
+- A particle needs two timesteps to travel diagonally
+- Collisions can not happen between two cells in the border between them.
+
 
 ## 3&emsp;Debugging with DDT
 <div style="display: flex; justify-content: center; align-items:center; flex-direction: column;">
@@ -106,7 +108,7 @@ Figure 3: DDT Debugger used to inspect sent data.
 </div>
 <br>
 
-We used DDT for debugging, and gathering information during our miniproject. We encountered several issues during the implementation of the miniproject and used DDT to resolve them. For example issues with particles being sent to non-existent neighbors and just disappering. We noticed our pressure results strangely diminishing with higher timestamps. With the help of DDT it was easy to identify the issue and determine what caused it. Another use case we used DDT for was measuring the amount of sent data and comparing it between each process each step. This was made easy with DDT, see <a style="color:inherit;" href="#figure3">figure 3</a>.
+We used DDT for debugging, and gathering information during our miniproject. We encountered several issues during the implementation of the miniproject and used DDT to resolve them. For example issues with particles being sent to non-existent neighbors and just disappearing. We noticed our pressure results strangely diminishing with higher timestamps. With the help of DDT it was easy to identify the issue and determine what caused it. Another use case we used DDT for was measuring the amount of sent data and comparing it between each process each step. This was made easy with DDT, see <a style="color:inherit;" href="#figure3">figure 3</a>.
 
 ## 4&emsp;Performance analysis with ITAC
 <div style="display: flex; justify-content: center; align-items:center; flex-direction: column;">
@@ -121,25 +123,35 @@ We used ITAC during the miniproject to determine where the bottleneck in the sys
 
 #### 5.1&emsp;Ideal gas law
 
+The gas law $pV = nRT$ was verified by calculating the temperature $T$ based on the known values we got from running our program. If the program follows the gas law, then the temperature should remain constant for any combination of box size and particle amount. Our result can be seen in <a style="color:inherit;" href="#figure5">figure 5</a>, <a style="color:inherit;" href="#figure6">figure 6</a> and <a style="color:inherit;" href="#figure7">figure 7</a>
+
 <div style="display: flex; justify-content: center; align-items:center; flex-direction: column;">
     <img id="figure5" src="./size.svg" style="width: 100%;"></img>
     Figure 5: Relation between box size and temperature, with 32000 particles.
 </div>
 <br>
+
 <div style="display: flex; justify-content: center; align-items:center; flex-direction: column;">
     <img id="figure6" src="./particles.svg" style="width: 100%;"></img>
     Figure 6: Relation between particle amount and temperature, with size 1000.
 </div>
 <br>
 
-The gas law $pV = nRT$ was verified by calculating the temperature $T$ based on the known values we got from running our program. If the program follows the gas law, then the temperature should remain constant for any combination of box size and particle amount. Our result can be seen in <a style="color:inherit;" href="#figure5">figure 5</a> and <a style="color:inherit;" href="#figure6">figure 6</a>. The program seems to follow the law quite well when the ratio of particles to size is small.
+The simulation seems to follow the law quite well except when the ratio of particles to size is large.
+
+<div style="display: flex; justify-content: center; align-items:center; flex-direction: column;">
+    <img id="figure7" src="./line.svg" style="width: 100%;"></img>
+    Figure 7: Relation between particle amount and temperature, with size 10000.
+</div>
+<br>
+
+With a smaller particle to size ratio, the ideal gas law is almost perfectly followed with a very straight line observed in <a style="color:inherit;" href="#figure7">figure 7</a>.
 
 #### 5.2&emsp;Speedup
-
-<br>
+Speedup is measured with 32000 particles and 100 timesteps, over an exponent of two processes.
 <div style="display: flex; justify-content: center; align-items:center; flex-direction: column;">
-    <img id="figure7" src="./time.svg" style="width: 100%;"></img>
-    Figure 7: Relation between execution time and process amount, with 32000 particles.
+    <img id="figure8" src="./time.svg" style="width: 100%;"></img>
+    Figure 8: Relation between execution time and process amount, with 32000 particles.
 </div>
 <br>
 
@@ -156,11 +168,11 @@ Table 1: Relation between execution time and process amount, with 32000 particle
 
 </div>
 
-The speedup of the program from using multiple processes can be seen in <a style="color:inherit;" href="#figure5">figure 7</a> and <a style="color:inherit;" href="#table1">table 1</a>. The speedup is superlienear, with a speedup of almost fourfold when the amount of processes is doubled. 
+The speedup of the program from using multiple processes can be seen in <a style="color:inherit;" href="#figure8">figure 8</a> and <a style="color:inherit;" href="#table1">table 1</a>. The speedup is superlinear, with a speedup of almost fourfold when the amount of processes is doubled. 
 
 #### 5.3&emsp;Linear vs Linked List
+A comparison of two different data structures can be seen in <a style="color:inherit;" href="#table2">table 2</a>, here it can be seen that the execution time is significantly faster when using std::vector.
 
-<br>
 <div id="table2" style="display: flex; justify-content: center; align-items:center; flex-direction: column;">
 Table 2: Comparison of performance of std::forward_list and std::vector, with 32000 particles.
 
@@ -173,25 +185,38 @@ Table 2: Comparison of performance of std::forward_list and std::vector, with 32
 </div>
 <br>
 
-A comparison of two different data structures can be seen in <a style="color:inherit;" href="#table2">table 2</a>, here it can be seen that the execution time is significantly faster when using std::vector.
+
 
 </div>
 
 ## 6&emsp;Discussion
+Ideal gas law, superlinear speedup and memory layout will be discussed.
 
 #### 6.1&emsp;Ideal gas law
 
-The simulation follows the ideal gas law. As seen in figure 5 the temperature remain almost constant as size increases and pressure drops. With one exception, being that for small sizes, the temperature is lower than it should. This is likley due to that in a smaller space with many particles, there will be a lot more collision, due to our limitations, if a particle collides with another particle, it can not wall bounce in that timestep, resulting in less pressure.
+The simulation follows the ideal gas law. As seen in figure 5 the temperature remain almost constant as size increases and pressure drops. With one exception, being that for small sizes, the temperature is lower than it should. This is likely due to that in a smaller space with many particles, there will be a lot more collision, due to our limitations, if a particle collides with another particle, it can not collide again in that timestep, resulting in less pressure.
 
-In figure 6, it can be observed that 
+In <a style="color:inherit;" href="#figure6">figure 6</a>, it can be observed that using many particles with a small size is not as accurate as using a larger size , as seen in figure <a style="color:inherit;" href="#figure7">figure 7</a>.
 
 #### 6.2&emsp;Superlinear speedup
+If running in $1$ processes, $t(n,1)= n^2$ operations are needed to check all collisions and complete one simulation timestep.
+
+If running in $p$ processes, the particles is most often divided into $n/p$ particles per process. This would result in the operations per processor being $t(n,p) = (n/p)^2 $.
+
+The relative speedup is thus $S_{rel}=\frac{t(n,1)}{t(n,p)} = \frac{n^2}{n^2/p^2} = p^2$.
+
+This matches what we see in <a style="color:inherit;" href="#table1">table 1</a>, with $T(1)=1636.98$ and $T(2)=422.378$, resulting in a relative speedup of $T(1)/T(2)=3.87 \approx 2^2$
 
 #### 6.3&emsp;Linear vs Linked List
 
+We initially thought the linked list would have better performance, considering its cheaper insertion and deletion, which each simulation timestep has a lot of. Although the more expensive operations of vector seemed to be negligible due to the major performance increase that was gained from its cache locality. 
+
+While analyzing the performance with ITAC, the linked list had more consistent computation time between communication steps across processes, since all operations are similarly expensive O(1), while on a vector, the operations vary from O(1) to O(n).
+
 ## 7&emsp;Conclusion
 
-## References
+In conclusion the model seems to be an alright estimation of the ideal gas law. It also benefits largely from parallelization. We were initially surprised by the superlienear speedup, but after looking into the theory of the course it made sense. This project also helped up learn that there are good debuggers for parallel programs, as well as how to use them. It also helped us learn how to use a traceanalyzer tool to further improve parallel programs. This project also helped us learn about the importance of cache locality, even if some other optimizations are sacrificed. This was ## References
+
 
 <div id="reference1"></div> 
 
