@@ -121,6 +121,8 @@ We used ITAC during the miniproject to determine where the bottleneck in the sys
 
 ## 5&emsp;Results
 
+The result regarding the ideal gas law, speedup and different implementations will be presented.
+
 #### 5.1&emsp;Ideal gas law
 
 The gas law $pV = nRT$ was verified by calculating the temperature $T$ based on the known values we got from running our program. If the program follows the gas law, then the temperature should remain constant for any combination of box size and particle amount. Our result can be seen in <a style="color:inherit;" href="#figure5">figure 5</a>, <a style="color:inherit;" href="#figure6">figure 6</a> and <a style="color:inherit;" href="#figure7">figure 7</a>
@@ -237,6 +239,8 @@ Grid sends less particles per timestep due to its higher ratio between area and 
 ## 7&emsp;Conclusion
 
 In conclusion the model seems to be an alright estimation of the ideal gas law. It also benefits largely from parallelization. We were initially surprised by the superlienear speedup, but after looking into the theory of the course it made sense. This project also helped up learn that there are good debuggers for parallel programs, as well as how to use them. It also helped us learn how to use a traceanalyzer tool to further improve parallel programs. This project also helped us learn about the importance of cache locality, even if some other optimizations are sacrificed. This was ## References
+
+## References
 
 
 <div id="reference1"></div> 
